@@ -5,7 +5,7 @@ const { mongoose } = require('./db/mongoose');
 
 const bodyParser = require('body-parser');
 
-const { User } = require('./db/models');
+const { User, Project } = require('./db/models');
 
 // Load middleware
 app.use(bodyParser.json());
@@ -46,13 +46,42 @@ let verifySession = (req, res, next) => {
 }
 
 // Project routes
-app.get('/projects', (req, res) => {});
+app.get('/projects', (req, res) => {
+    // Return an array of all the projects in database
+    Project.find({}).then((projects) => {
+        res.send(projects);
+    });
+});
 
-app.post('/projects', (req, res) => {});
+app.post('/projects', (req, res) => {
+    // Create a new project and return the new project document back to the user
+    let title = req.body.title;
+    let newProject = new Project({
+        title
+    });
+    newProject.save().then((projectDoc) => {
+        // Return the new project
+        res.send(projectDoc);
+    });
+});
 
-app.patch('/projects/:id', (req, res) => {});
+app.patch('/projects/:id', (req, res) => {
+    // Update the specified project with the new values specified in the JSON body of the request
+    Project.findOneAndUpdate({ _id: req.params.id }, {
+        $set: req.body
+    }).then(() => {
+        res.sendStatus(200);
+    });
+});
 
-app.delete('/projects/:id', (req, res) => {});
+app.delete('/projects/:id', (req, res) => {
+    // Delete a specified project
+    Project.findOneAndRemove({
+        _id: req.params.id
+    }).then((removedProjectDoc) => {
+        res.send(removedProjectDoc);
+    });
+});
 
 
 
