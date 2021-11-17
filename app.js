@@ -5,7 +5,7 @@ const { mongoose } = require('./db/mongoose');
 
 const bodyParser = require('body-parser');
 
-const { User, Project } = require('./db/models');
+const { User, Project, Task } = require('./db/models');
 
 // Load middleware
 app.use(bodyParser.json());
@@ -83,8 +83,63 @@ app.delete('/projects/:id', (req, res) => {
     });
 });
 
+// Task routes
+app.get('/projects/:projectId/tasks', (req, res) => {
+    // Return all tasks that belong to a specific project
+    Task.find({
+        _projectId: req.params.projectId
+    }).then((tasks) => {
+        res.send(tasks);
+    });
+});
 
+app.get('/projects/:projectId/tasks/:taskId', (req, res) => {
+     // Return a specific task in a project
+     Task.findOne({
+        _id: req.params.taskId,
+        _projectId: req.params.projectId
+    }).then((task) => {
+        res.send(task);
+    });
+});
 
+app.post('/projects/:projectId/tasks', (req, res) => {
+    // Create new task in specified project
+    let newTask = new Task({
+        title: req.body.title,
+        description: req.body.description,
+        duration: req.body.duration,
+        _projectId: req.params.projectId
+    });
+    newTask.save().then((newTaskDoc) => {
+        res.send(newTaskDoc);
+    });
+});
+
+app.patch('/projects/:projectId/tasks/:taskId', (req, res) => {
+    // Update specified task
+    Task.findOneAndUpdate(
+        {
+            _id: req.params.taskId,
+            _projectId: req.params.projectId
+        },
+        {
+            $set: req.body
+        }
+    ).then(() => {
+        res.sendStatus(200);
+    });
+});
+
+app.delete('/projects/:projectId/tasks/:taskId', (req, res) => {
+    // Delete a specified task
+    Task.findOneAndRemove({
+        _id: req.params.taskId,
+        _projectId: req.params.projectId
+    }).then((removeTaskDoc) => {
+        res.send(removeTaskDoc);
+    });
+});
 
 // User routes
 // Sign up
