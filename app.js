@@ -7,8 +7,35 @@ const bodyParser = require('body-parser');
 
 const { User, Project, Task } = require('./db/models');
 
+const jwt = require('jsonwebtoken');
+
 // Load middleware
 app.use(bodyParser.json());
+
+app.use(function (req, res, next) {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS, PUT, PATCH, DELETE");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, x-access-token, x-refresh-token, _id");
+
+    res.header(
+        'Access-Control-Expose-Headers',
+        'x-access-token, x-refresh-token'
+    );
+
+    next();
+});
+
+let authenticate = (req, res, next) => {
+    let token = req.header('x-access-token');
+    jwt.verify(token, User.getJWTSecret(), (err, decoded) => {
+        if (err) {
+            res.status(401).send(err);
+        } else {
+            req.user_id = decoded._id;
+            next();
+        }
+    });
+}
 
 // Verify refresh Token Middleware
 let verifySession = (req, res, next) => {
@@ -46,18 +73,23 @@ let verifySession = (req, res, next) => {
 }
 
 // Project routes
-app.get('/projects', (req, res) => {
+app.get('/projects', authenticate, (req, res) => {
     // Return an array of all the projects in database
-    Project.find({}).then((projects) => {
+    Project.find({
+        _userId: req.user_id
+    }).then((projects) => {
         res.send(projects);
+    }).catch((e) => {
+        res.send(e);
     });
 });
 
-app.post('/projects', (req, res) => {
+app.post('/projects', authenticate, (req, res) => {
     // Create a new project and return the new project document back to the user
     let title = req.body.title;
     let newProject = new Project({
-        title
+        title,
+        _userId: req.user_id
     });
     newProject.save().then((projectDoc) => {
         // Return the new project
@@ -65,26 +97,28 @@ app.post('/projects', (req, res) => {
     });
 });
 
-app.patch('/projects/:id', (req, res) => {
+app.patch('/projects/:id', authenticate, (req, res) => {
     // Update the specified project with the new values specified in the JSON body of the request
-    Project.findOneAndUpdate({ _id: req.params.id }, {
+    Project.findOneAndUpdate({ _id: req.params.id, _userId: req.user_id }, {
         $set: req.body
     }).then(() => {
         res.sendStatus(200);
     });
 });
 
-app.delete('/projects/:id', (req, res) => {
+app.delete('/projects/:id', authenticate, (req, res) => {
     // Delete a specified project
     Project.findOneAndRemove({
-        _id: req.params.id
+        _id: req.params.id, 
+        _userId: req.user_id
     }).then((removedProjectDoc) => {
         res.send(removedProjectDoc);
+        deleteTasksFromProject(removedProjectDoc._id);
     });
 });
 
 // Task routes
-app.get('/projects/:projectId/tasks', (req, res) => {
+app.get('/projects/:projectId/tasks', authenticate, (req, res) => {
     // Return all tasks that belong to a specific project
     Task.find({
         _projectId: req.params.projectId
@@ -103,41 +137,76 @@ app.get('/projects/:projectId/tasks/:taskId', (req, res) => {
     });
 });
 
-app.post('/projects/:projectId/tasks', (req, res) => {
-    // Create new task in specified project
-    let newTask = new Task({
-        title: req.body.title,
-        description: req.body.description,
-        duration: req.body.duration,
-        _projectId: req.params.projectId
-    });
-    newTask.save().then((newTaskDoc) => {
-        res.send(newTaskDoc);
-    });
-});
-
-app.patch('/projects/:projectId/tasks/:taskId', (req, res) => {
-    // Update specified task
-    Task.findOneAndUpdate(
-        {
-            _id: req.params.taskId,
-            _projectId: req.params.projectId
-        },
-        {
-            $set: req.body
+app.post('/projects/:projectId/tasks', authenticate, (req, res) => {
+    Project.findOne({
+        _id: req.params.projectId,
+        _userId: req.user_id
+    }).then((project) => {
+        if (project) {
+            return true;
         }
-    ).then(() => {
-        res.sendStatus(200);
+        return false;
+    }).then((canCreateTask) => {
+        if (canCreateTask) {
+            let newTask = new Task({
+                title: req.body.title,
+                _projectId: req.params.projectId
+            });
+            newTask.save().then((newTaskDoc) => {
+                res.send(newTaskDoc);
+            })
+        } else {
+            res.sendStatus(404);
+        }
     });
 });
 
-app.delete('/projects/:projectId/tasks/:taskId', (req, res) => {
-    // Delete a specified task
-    Task.findOneAndRemove({
-        _id: req.params.taskId,
-        _projectId: req.params.projectId
-    }).then((removeTaskDoc) => {
-        res.send(removeTaskDoc);
+app.patch('/projects/:projectId/tasks/:taskId', authenticate, (req, res) => {
+    Project.findOne({
+        _id: req.params.projectId,
+        _userId: req.user_id
+    }).then((project) => {
+        if (project) {
+            return true;
+        }
+        return false;
+    }).then((canUpdateTasks) => {
+        if (canUpdateTasks) {
+            Task.findOneAndUpdate({
+                _id: req.params.taskId,
+                _projectId: req.params.projectId
+            }, {
+                    $set: req.body
+                }
+            ).then(() => {
+                res.send({ message: 'Updated successfully.' })
+            })
+        } else {
+            res.sendStatus(404);
+        }
+    });
+});
+
+app.delete('/projects/:projectId/tasks/:taskId', authenticate, (req, res) => {
+    Project.findOne({
+        _id: req.params.projectId,
+        _userId: req.user_id
+    }).then((project) => {
+        if (project) {
+            return true;
+        }
+        return false;
+    }).then((canDeleteTasks) => {
+        if (canDeleteTasks) {
+            Task.findOneAndRemove({
+                _id: req.params.taskId,
+                _projectId: req.params.projectId
+            }).then((removedTaskDoc) => {
+                res.send(removedTaskDoc);
+            })
+        } else {
+            res.sendStatus(404);
+        }
     });
 });
 
@@ -191,6 +260,15 @@ app.get('/me/access-token', verifySession, (req,res) => {
         res.status(400).send(e);
     });
 });
+
+/* HELPER METHODS */
+let deleteTasksFromList = (_projectId) => {
+    Task.deleteMany({
+        _projectId
+    }).then(() => {
+        console.log("Tasks from " + _projectId + " were deleted!");
+    })
+}
 
 app.listen(3000, () => {
     console.log('Server listening on port 3000');
