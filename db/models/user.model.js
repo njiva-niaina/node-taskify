@@ -40,7 +40,7 @@ UserSchema.methods.toJSON = function() {
     return _.omit(userObject, ['password', 'sessions']);
 };
 
-UserSchema.methods.generateAccessToken = function () {
+UserSchema.methods.generateAccessAuthToken = function () {
     const user = this;
     return new Promise((resolve, reject) => {
         // Create and return JWT 
@@ -104,7 +104,7 @@ UserSchema.statics.findByCredentials = function(email, password) {
 
 UserSchema.statics.hasRefreshTokenExpired = function (expiresAt) {
     let secondsSinceEpoch = Date.now() / 1000;
-    return (secondsSinceEpoch > expiresAt) ? false : true;
+    return (secondsSinceEpoch > expiresAt) ? true : false;
 };
 
 // Hash password before saving
@@ -127,7 +127,7 @@ UserSchema.pre('save', function(next){
 // Helper methods
 let saveSessionToDatabase = (user, refreshToken) => {
     return new Promise((resolve, reject) => {
-        let expiresAt = generateRefreshTokenExpiryTime;
+        let expiresAt = generateRefreshTokenExpiryTime();
         user.sessions.push({'token': refreshToken, expiresAt});
         user.save().then(() => {
             return resolve(refreshToken);
@@ -138,7 +138,7 @@ let saveSessionToDatabase = (user, refreshToken) => {
 };
 
 let generateRefreshTokenExpiryTime = () => {
-    let daysUntilExpire = '10';
+    let daysUntilExpire = 10;
     let secondUntilExpire = ((daysUntilExpire * 24) * 60) * 60;
     return ((Date.now()/1000) * secondUntilExpire);
 };
